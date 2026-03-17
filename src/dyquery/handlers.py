@@ -153,7 +153,7 @@ async def handle_query_recent(bot:Bot, event: Event, sql_session:async_scoped_se
                 await query_recent.finish(f"玩家{user_name}的最近游玩记录：\n曲名：{music_name}\n难度：{diffs[difficulty_class-1]} {difficulty_value}\n分数：{score}\nPerfect: {perfect}\nGood: {good}\nMiss: {miss}\nR值：{r}\n准确率：{accuracy*100:.2f}%\n数据来源: Dynamite Explode")
         elif args=="":
             # generate recent image
-            recent_image = await generate_image(
+            recent_image = await generate_image_recent(
                 r=r,
                 music_name=music_name,
                 difficulty_class=difficulty_class,
@@ -233,7 +233,7 @@ async def handle_discord_recent(event:InteractionCreateEvent,sql_session:async_s
         await query_recent_discord.finish(reply +"Query Failed")
 
     # generate recent image
-    recent_image = await generate_image(
+    recent_image = await generate_image_recent(
         r=r,
         music_name=music_name,
         difficulty_class=difficulty_class,

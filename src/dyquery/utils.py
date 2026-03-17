@@ -11,6 +11,7 @@ import asyncio
 from datetime import datetime
 import pytz
 
+from decimal import Decimal
 from io import BytesIO
 
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent,GroupMessageEvent
@@ -26,6 +27,12 @@ from .dyuserinfo import dyUserInfo
 
 config = get_plugin_config(Config)
 
+class BombException(RuntimeError):
+    """
+    Explode Errors
+    """
+    pass
+
 image_asset_dir = Path(__file__).parent / "assets"
 image_asset_dir.mkdir(exist_ok=True)
 
@@ -40,9 +47,8 @@ async def is_whitelist(bot:Bot,event: Event) -> bool:
     
     if(isinstance(event,GroupMessageEvent)):
         
-        rtn = str(event.group_id) in config.dyquery_white_list
+        return str(event.group_id) in config.dyquery_white_list
         # logger.debug(f"Checking value {rtn}")
-        return rtn
     elif(isinstance(event,GuildMessageCreateEvent)):
         logger.debug(f"Get message:{event.message} from guild {event.guild_id}")
         return True
@@ -54,6 +60,25 @@ async def is_whitelist(bot:Bot,event: Event) -> bool:
     else:
         return False
 
+async def is_whitelist_b20(bot:Bot,event: Event) -> bool:
+    # check_type=type(event.group_id)
+    # logger.debug(f"Group type:{check_type}")
+    logger.debug(f"Getting bot info:{bot}")
+    
+    if(isinstance(event,GroupMessageEvent)):
+        return str(event.group_id) in config.dyquery_b20_white_list
+        # logger.debug(f"Checking value {rtn}")
+    elif(isinstance(event,GuildMessageCreateEvent)):
+        logger.debug(f"Get message:{event.message} from guild {event.guild_id}")
+        return True
+    elif(isinstance(event,ApplicationCommandInteractionEvent)):
+        logger.debug(f"Get message:{event.data} from guild {event.guild_id}")
+        return True
+    elif(isinstance(event,PrivateMessageEvent)):
+        return True
+    else:
+        return False
+    
 # 计算准确率
 def calculate_acc(perfect: int, good: int, miss: int) -> float:
     total = perfect + good + miss
@@ -61,7 +86,7 @@ def calculate_acc(perfect: int, good: int, miss: int) -> float:
         return 0.0
     return (perfect + good * 0.5) / total
 
-# 
+
 def paste_rank(image:Image.Image ,score:int):
     """
     returns a difficulty icon in Image.Image
@@ -91,15 +116,11 @@ def paste_rank(image:Image.Image ,score:int):
     image.paste(rank_icon,(110,400),rank_icon)
     return image
 
-
-async def bind_user(user_id,user_name,source="QQ") -> str: 
+async def fetch_user(user_name)-> tuple[str, str]:
     """
-    bind with dynamite account and return reply string
+    Get explode user data by name
+    return:id,username
     """
-    # verify that the provided username actually exists by calling
-    # the configured search endpoint.
-    response=""
-    account_user_id=user_id
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -113,7 +134,41 @@ async def bind_user(user_id,user_name,source="QQ") -> str:
             data = resp.json().get("data", {})
     except Exception as exc:
         logger.info("USER_NOT_FOUND:用户不存在")
-        raise exc
+        raise BombException(f"{exc}")
+    return data["id"],data["username"]
+
+
+async def fetch_user_by_id(user_id:str):
+    """
+    Get explode user data by name
+    return:data in dict
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                config.api_base_url + config.user_base_api+ user_id,
+                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            # get the data field from the response, which should contain user info if the username exists
+            data = resp.json().get("data", {})
+    except Exception as exc:
+        raise BombException(f"{exc}")
+    return data
+
+async def bind_user(user_id,user_name,source="QQ") -> str: 
+    """
+    bind with dynamite account and return reply string
+    """
+    # verify that the provided username actually exists by calling
+    # the configured search endpoint.
+    response=""
+    account_user_id=user_id
+    try:
+        id,name=await fetch_user(user_name)
+    except Exception as exc:
+        raise BombException(f"{exc}")
     
     sql_session=get_session()
     async with sql_session.begin():
@@ -122,36 +177,36 @@ async def bind_user(user_id,user_name,source="QQ") -> str:
             if (dyuserinfo := await sql_session.get(dyUserInfo, account_user_id)):
                 previous_username = dyuserinfo.dynamite_username
                 dyuserinfo.set_username(user_name)
-                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.set_user_id(id)
                 dyuserinfo.source="Discord"
                 sql_session.add(dyuserinfo)
-                response=f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}"
+                response=f"\nLinked with Explode user: {name}\nPreviously linked username: {previous_username}"
                 
                 # await bind.send(reply + f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}")
             else:
                 # no existing record for this user, create a new one
                 dyuserinfo = dyUserInfo(account_user_id)
                 dyuserinfo.set_username(user_name)
-                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.set_user_id(id)
                 dyuserinfo.source="Discord"
                 sql_session.add(dyuserinfo)
-                response=f"\nLinked with Explode user: {data['username']}"
+                response=f"\nLinked with Explode user: {name}"
                 # await bind.send(reply + f"\nLinked with Explode user: {data['username']}")
         else:
             if (dyuserinfo := await sql_session.get(dyUserInfo,     account_user_id)):
                 previous_username = dyuserinfo.dynamite_username
                 dyuserinfo.set_username(user_name)
-                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.set_user_id(id)
                 sql_session.add(dyuserinfo)
-                response=f"已绑定Explode用户：{data['username']}\n旧用户名：{previous_username}"
+                response=f"已绑定Explode用户：{name}\n旧用户名：{previous_username}"
                 # await bind.send(reply + f"已绑定Explode用户：{data['username']}\n旧用户名：{previous_username}")
             else:
             # no existing record for this user, create a new one
                 dyuserinfo = dyUserInfo(account_user_id)
                 dyuserinfo.set_username(user_name)
-                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.set_user_id(id)
                 sql_session.add(dyuserinfo)
-                response=f"已绑定Explode用户：{data['username']}"
+                response=f"已绑定Explode用户：{name}"
                 # await bind.send(reply + f"已绑定Explode用户：{data['username']}")
     return response
                 
@@ -164,15 +219,15 @@ async def fetch_recent(dyuserinfo:dyUserInfo):
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                    config.api_base_url + config.user_base_api+dyuserinfo.dynamite_user_id+"/last",
-                    headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                    timeout=5,
-                )
+                config.api_base_url + config.user_base_api+dyuserinfo.dynamite_user_id+"/last",
+                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
+                timeout=10,
+            )
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
         latest_record = resp.json().get("data", [])[0]
     except Exception as exc:
-        raise exc
+        raise BombException(f"{exc}")
     
     logger.debug(f"Received latest record: {latest_record}")
     
@@ -200,7 +255,26 @@ async def fetch_recent(dyuserinfo:dyUserInfo):
 
     return r,music_name,difficulty_class,difficulty_value,score,perfect,good,miss,playtime,set_id,accuracy,user_name
 
-async def generate_image(**kwargs):
+async def fetch_b20(uuid:str):
+    """
+    Fetch the Best20 record of a user
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                config.api_base_url + config.user_base_api+uuid+"/best",
+                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            # get the data field from the response, which should contain user info if the username exists
+        best_records = resp.json().get("data", [])
+    except Exception as exc:
+        raise BombException(f"{exc}")
+    logger.debug(f"Received Best record: {best_records}")
+    return best_records
+
+async def generate_image_recent(**kwargs):
     """
     draw recent record image
     """
@@ -237,7 +311,7 @@ async def generate_image(**kwargs):
     try:
         # There are redirects in the bg download url, so we need to allow redirects in the http client
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            bg_response = await client.get(config.bg_download_url_base+str(set_id), timeout=10)
+            bg_response = await client.get(config.bg_download_url_base + str(set_id), timeout=10)
             bg_response.raise_for_status()
             bg_image = Image.open(BytesIO(bg_response.content)).convert("RGBA")
             bg_image = bg_image.resize((1900,830))
@@ -292,7 +366,6 @@ async def generate_image(**kwargs):
     # this is the text_width
     text_width=bbox[2]-bbox[0]
             
-
     #draw text
     draw.text((200,256), f"{difficulty_value}", font=eurostyle_bold, fill=(255,255,255),anchor="ma",align="center")
     # Music name
