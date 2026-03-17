@@ -44,13 +44,15 @@ config = get_plugin_config(Config)
 # CreateTable(dyUserInfo.__table__)
 
 from .handlers import bind, query_recent,bind_discord,query_recent_discord,query_recent_discord_text
+from .b20_handler import best20,best20_discord
 
 bind_process = bind
 query_recent_process = query_recent
-
+b20=best20
 # discord handlers
 b_d=bind_discord
 q_d=query_recent_discord
 q_dt=query_recent_discord_text
+b20_d=best20_discord
 
 

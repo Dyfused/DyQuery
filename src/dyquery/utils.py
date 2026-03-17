@@ -13,6 +13,14 @@ import pytz
 
 from io import BytesIO
 
+from nonebot.adapters.onebot.v11 import PrivateMessageEvent,GroupMessageEvent
+from nonebot.adapters import Bot
+
+from nonebot.adapters.discord import GuildMessageCreateEvent, InteractionCreateEvent,ApplicationCommandInteractionEvent
+from nonebot.adapters import Event
+
+from nonebot_plugin_orm import get_session
+
 from .config import Config
 from .dyuserinfo import dyUserInfo
 
@@ -21,6 +29,31 @@ config = get_plugin_config(Config)
 image_asset_dir = Path(__file__).parent / "assets"
 image_asset_dir.mkdir(exist_ok=True)
 
+#=============Rule Checkers=============
+async def is_enabled() -> bool:
+    return config.dyquery_plugin_enabled
+
+async def is_whitelist(bot:Bot,event: Event) -> bool:
+    # check_type=type(event.group_id)
+    # logger.debug(f"Group type:{check_type}")
+    logger.debug(f"Getting bot info:{bot}")
+    
+    if(isinstance(event,GroupMessageEvent)):
+        
+        rtn = str(event.group_id) in config.dyquery_white_list
+        # logger.debug(f"Checking value {rtn}")
+        return rtn
+    elif(isinstance(event,GuildMessageCreateEvent)):
+        logger.debug(f"Get message:{event.message} from guild {event.guild_id}")
+        return True
+    elif(isinstance(event,ApplicationCommandInteractionEvent)):
+        logger.debug(f"Get message:{event.data} from guild {event.guild_id}")
+        return True
+    elif(isinstance(event,PrivateMessageEvent)):
+        return True
+    else:
+        return False
+
 # 计算准确率
 def calculate_acc(perfect: int, good: int, miss: int) -> float:
     total = perfect + good + miss
@@ -28,7 +61,11 @@ def calculate_acc(perfect: int, good: int, miss: int) -> float:
         return 0.0
     return (perfect + good * 0.5) / total
 
+# 
 def paste_rank(image:Image.Image ,score:int):
+    """
+    returns a difficulty icon in Image.Image
+    """
     rank_icon: Image.Image
     if score==1000000:
         rank_icon=Image.open(image_asset_dir / "UI1_Difficulties_0.png")
@@ -54,8 +91,76 @@ def paste_rank(image:Image.Image ,score:int):
     image.paste(rank_icon,(110,400),rank_icon)
     return image
 
+
+async def bind_user(user_id,user_name,source="QQ") -> str: 
+    """
+    bind with dynamite account and return reply string
+    """
+    # verify that the provided username actually exists by calling
+    # the configured search endpoint.
+    response=""
+    account_user_id=user_id
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                config.api_base_url + config.user_search_api,
+                json={"username": user_name},
+                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            # get the data field from the response, which should contain user info if the username exists
+            data = resp.json().get("data", {})
+    except Exception as exc:
+        logger.info("USER_NOT_FOUND:用户不存在")
+        raise exc
+    
+    sql_session=get_session()
+    async with sql_session.begin():
+        if source=="Discord":
+        # For Discord bots
+            if (dyuserinfo := await sql_session.get(dyUserInfo, account_user_id)):
+                previous_username = dyuserinfo.dynamite_username
+                dyuserinfo.set_username(user_name)
+                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.source="Discord"
+                sql_session.add(dyuserinfo)
+                response=f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}"
+                
+                # await bind.send(reply + f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}")
+            else:
+                # no existing record for this user, create a new one
+                dyuserinfo = dyUserInfo(account_user_id)
+                dyuserinfo.set_username(user_name)
+                dyuserinfo.set_user_id(data["id"])
+                dyuserinfo.source="Discord"
+                sql_session.add(dyuserinfo)
+                response=f"\nLinked with Explode user: {data['username']}"
+                # await bind.send(reply + f"\nLinked with Explode user: {data['username']}")
+        else:
+            if (dyuserinfo := await sql_session.get(dyUserInfo,     account_user_id)):
+                previous_username = dyuserinfo.dynamite_username
+                dyuserinfo.set_username(user_name)
+                dyuserinfo.set_user_id(data["id"])
+                sql_session.add(dyuserinfo)
+                response=f"已绑定Explode用户：{data['username']}\n旧用户名：{previous_username}"
+                # await bind.send(reply + f"已绑定Explode用户：{data['username']}\n旧用户名：{previous_username}")
+            else:
+            # no existing record for this user, create a new one
+                dyuserinfo = dyUserInfo(account_user_id)
+                dyuserinfo.set_username(user_name)
+                dyuserinfo.set_user_id(data["id"])
+                sql_session.add(dyuserinfo)
+                response=f"已绑定Explode用户：{data['username']}"
+                # await bind.send(reply + f"已绑定Explode用户：{data['username']}")
+    return response
+                
+
 # fetch recent record
 async def fetch_recent(dyuserinfo:dyUserInfo):
+    """
+    Fetch the recent record of a user
+    """
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -95,9 +200,10 @@ async def fetch_recent(dyuserinfo:dyUserInfo):
 
     return r,music_name,difficulty_class,difficulty_value,score,perfect,good,miss,playtime,set_id,accuracy,user_name
 
-# draw recent record image
 async def generate_image(**kwargs):
-    
+    """
+    draw recent record image
+    """
     r=kwargs.get("r", "UnRanked")
     music_name=kwargs.get("music_name")
     difficulty_class=kwargs.get("difficulty_class")

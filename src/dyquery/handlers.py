@@ -39,30 +39,7 @@ from .utils import *
 
 config = get_plugin_config(Config)
 
-async def is_enabled() -> bool:
-    return config.dyquery_plugin_enabled
 
-async def is_whitelist(bot:Bot,event: Event) -> bool:
-    # check_type=type(event.group_id)
-    # logger.debug(f"Group type:{check_type}")
-    logger.debug(f"Getting bot info:{bot}")
-    
-    if(isinstance(event,GroupMessageEvent)):
-        
-        rtn = str(event.group_id) in config.dyquery_white_list
-        # logger.debug(f"Checking value {rtn}")
-        return rtn
-    elif(isinstance(event,GuildMessageCreateEvent)):
-        logger.debug(f"Get message:{event.message} from guild {event.guild_id}")
-        return True
-    elif(isinstance(event,ApplicationCommandInteractionEvent)):
-        logger.debug(f"Get message:{event.data} from guild {event.guild_id}")
-        return True
-    elif(isinstance(event,PrivateMessageEvent)):
-        return True
-    else:
-        return False
-    
 rule = Rule(is_enabled, is_whitelist)
 
 diffs=["CASUAL","NORMAL","HARD","MEGA","GIGA","TERA"]
@@ -99,7 +76,7 @@ query_recent_discord_text=on_slash_command(
 # ===============Account Bind================
 
 @bind.handle()
-async def handle_bind(bot:Bot, event: Event, sql_session:async_scoped_session,args: Message = CommandArg()):
+async def handle_bind(bot:Bot, event: Event, args: Message = CommandArg()):
 
     # get arguments
     args = args.extract_plain_text().strip()
@@ -107,7 +84,7 @@ async def handle_bind(bot:Bot, event: Event, sql_session:async_scoped_session,ar
 
     account_user_id=event.get_user_id()
     if bot.type=="Discord":
-        reply = DiscordMessageSegment.mention_user(event.user_id)
+        reply = DiscordMessageSegment.mention_user(account_user_id)
         # reply = DiscordMessageSegment.reply(event.message_id)
         if not args:
             await bind.finish(reply + "\nPlease provide your Dynamite Explode user name.\nUsage：/dybind <username>")
@@ -116,71 +93,18 @@ async def handle_bind(bot:Bot, event: Event, sql_session:async_scoped_session,ar
         if not args:
             await bind.finish(reply + "请提供要绑定的Dynamite Explode用户名。\n使用方法：/dybind <用户名> 或 /绑定用户 <用户名>")
     
-    # verify that the provided username actually exists by calling
-    # the configured search endpoint.
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                config.api_base_url + config.user_search_api,
-                json={"username": args},
-                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            # get the data field from the response, which should contain user info if the username exists
-            data = resp.json().get("data", {})
+        if bot.type=="Discord":
+            rp_text=await bind_user(account_user_id,args,"Discord")
+            logger.debug(f"Received bind command with args: {args} from Discord user: {account_user_id}")
+        else:
+            rp_text=await bind_user(account_user_id,args)
+            logger.debug(f"Received bind command with args: {args} from QQ user: {account_user_id}")
     except Exception as exc:
-
         logger.info("USER_NOT_FOUND:用户不存在")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await bind.finish(reply +"\n500 USER_NOT_FOUND: User does not exist.")
-
-    # User id is stored in "id" field of the response data,and user name is stored in "username" field.
-    # logger.debug(f"Received response from user search endpoint: {data}")
-
-    # From here we can confirm that the username is valid
-    if bot.type=="Discord":
-        # For Discord bots
-        if (dyuserinfo := await sql_session.get(dyUserInfo, account_user_id)):
-            previous_username = dyuserinfo.dynamite_username
-            dyuserinfo.set_username(args)
-            dyuserinfo.set_user_id(data["id"])
-            dyuserinfo.source="Discord"
-            sql_session.add(dyuserinfo)
-            await bind.send(reply + f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}")
-        else:
-            # no existing record for this user, create a new one
-            dyuserinfo = dyUserInfo(account_user_id)
-            dyuserinfo.set_username(args)
-            dyuserinfo.set_user_id(data["id"])
-            dyuserinfo.source="Discord"
-            sql_session.add(dyuserinfo)
-            await bind.send(reply + f"\nLinked with Explode user: {data['username']}")
-    else:
-        if (dyuserinfo := await sql_session.get(dyUserInfo, account_user_id)):
-            previous_username = dyuserinfo.dynamite_username
-            dyuserinfo.set_username(args)
-            dyuserinfo.set_user_id(data["id"])
-            sql_session.add(dyuserinfo)
-            await bind.send(reply + f"已绑定Explode用户：{data['username']}\n旧用户名：{previous_username}")
-        else:
-            # no existing record for this user, create a new one
-            dyuserinfo = dyUserInfo(account_user_id)
-            dyuserinfo.set_username(args)
-            dyuserinfo.set_user_id(data["id"])
-            sql_session.add(dyuserinfo)
-            await bind.send(reply + f"已绑定Explode用户：{data['username']}")
-    #用户QQ号
-    
-    # dyuserinfo.load_info() 
-    # output received arguments
-    if bot.type=="Discord":
-        logger.debug(f"Received bind command with args: {args} from Discord user: {account_user_id}")
-    else:
-        logger.debug(f"Received bind command with args: {args} from QQ user: {account_user_id}")
-    
-    await sql_session.commit()
-    await bind.finish()
+    await bind.finish(reply + rp_text)
 
 # ===============Recent Query================
     
@@ -276,52 +200,18 @@ async def _(event:InteractionCreateEvent,usr: CommandOption[str]):
     await bind_discord.send(DiscordMessageSegment.text(f"Received username: {usr}"))
 """
 
-
 @bind_discord.handle()
-async def handle_bind_discord(event:InteractionCreateEvent,sql_session:async_scoped_session,usr: CommandOption[str]):
+async def handle_bind_discord(event:InteractionCreateEvent,usr: CommandOption[str]):
     await bind_discord.send_deferred_response()
     discord_user=event.get_user_id()
     logger.debug(f"handling bind, argument: {usr}")
-    # verify that the provided username actually exists by calling
-    # the configured search endpoint.
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                config.api_base_url + config.user_search_api,
-                json={"username": usr},
-                headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            # get the data field from the response, which should contain user info if the username exists
-            data = resp.json().get("data", {})
+        rp_text=await bind_user(discord_user,usr,"Discord")
     except Exception as exc:
         logger.info("USER_NOT_FOUND:用户不存在")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await bind_discord.finish(DiscordMessageSegment.text("500 USER_NOT_FOUND: User does not exist."))
-    
-    try:
-    # await bind_discord.send_response(DiscordMessageSegment.text("Binding user"))
-        if (dyuserinfo := await sql_session.get(dyUserInfo, discord_user)):
-            previous_username = dyuserinfo.dynamite_username
-            dyuserinfo.set_username(usr)
-            dyuserinfo.set_user_id(data["id"])
-            dyuserinfo.source="Discord"
-            sql_session.add(dyuserinfo)
-            await bind_discord.send(DiscordMessageSegment.text(f"\nLinked with Explode user: {data['username']}\nPreviously linked username: {previous_username}"))
-        else:
-            # no existing record for this user, create a new one
-            dyuserinfo = dyUserInfo(discord_user)
-            dyuserinfo.set_username(usr)
-            dyuserinfo.set_user_id(data["id"])
-            dyuserinfo.source="Discord"
-            sql_session.add(dyuserinfo)
-            await bind_discord.send(DiscordMessageSegment.text(f"\nLinked with Explode user: {data['username']}"))
-    except Exception as exc:
-        await bind_discord.finish(f"Error: {exc}")
-    logger.debug(f"Received bind commandwith username: {usr} from Discord user: {discord_user}")
-    await sql_session.commit()
-    await bind_discord.finish()
+    await bind_discord.finish(DiscordMessageSegment.text(rp_text))
 
 
 @query_recent_discord.handle()
@@ -332,13 +222,11 @@ async def handle_discord_recent(event:InteractionCreateEvent,sql_session:async_s
 
     if (dyuserinfo := await sql_session.get(dyUserInfo, user)):
         await query_recent_discord.send_response(DiscordMessageSegment.text(f"Getting the latest play record for user: {dyuserinfo.dynamite_username}"))
-
     else:
         await query_recent_discord.finish("\nYour Discord account has not linked with any Dynamite Explode accounts yet. Use /dybind <username> to link with one.")
     # fetch recent record
     try:
         r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
-
     except Exception as exc:
         logger.error("Query Failed")
         # logger.debug(f"Received error response from user search endpoint: {exc}")

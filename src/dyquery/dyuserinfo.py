@@ -5,8 +5,10 @@ from sqlalchemy.schema import CreateTable
 import nonebot_plugin_localstore as store
 import pickle
 
-# Dy用户类，和QQ号绑定的Dynamite用户名和用户ID
 class dyUserInfo(Model):
+    """
+    Dy用户类，和QQ号/Discord号绑定的Dynamite用户名和用户ID
+    """
     __tablename__ = "ExplodeUserInfo"
     user_id: Mapped[str] = mapped_column(primary_key=True)
     dynamite_username: Mapped[str]
