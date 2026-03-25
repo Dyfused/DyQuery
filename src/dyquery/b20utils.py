@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 import base64
-import httpx
-import time
-import random
 import asyncio
-from datetime import datetime
-import pytz
 from functools import lru_cache
 
 import aiohttp
@@ -21,13 +16,11 @@ from pathlib import Path
 
 from nonebot import logger
 
-from nonebot_plugin_orm import get_session
 from nonebot import get_plugin_config
 import nonebot_plugin_localstore as store
 
 from .config import Config
-from .dyuserinfo import dyUserInfo
-from .utils import BombException,fetch_b20
+from .utils import fetch_b20
 
 config = get_plugin_config(Config)
 image_asset_dir = Path(__file__).parent / "assets"

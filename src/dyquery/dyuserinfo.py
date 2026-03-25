@@ -1,6 +1,5 @@
 from nonebot_plugin_orm import Model
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.schema import CreateTable
 
 import nonebot_plugin_localstore as store
 import pickle

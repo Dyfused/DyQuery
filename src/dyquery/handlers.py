@@ -6,10 +6,10 @@ from nonebot_plugin_orm import async_scoped_session
 
 from nonebot.adapters import Event
 from nonebot.rule import Rule
-from nonebot.adapters.onebot.v11 import MessageSegment, PrivateMessageEvent,GroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.adapters import Message, Bot
 
-from nonebot.adapters.discord import GuildMessageCreateEvent, InteractionCreateEvent,ApplicationCommandInteractionEvent
+from nonebot.adapters.discord import InteractionCreateEvent
 from nonebot.adapters.discord import MessageSegment as DiscordMessageSegment
 
 from nonebot.params import CommandArg
@@ -17,12 +17,7 @@ from nonebot.params import CommandArg
 import nonebot_plugin_localstore as store
 
 from nonebot.adapters.discord.api import (
-    IntegerOption,
-    NumberOption,
     StringOption,
-    SubCommandOption,
-    User,
-    UserOption,
 )
 from nonebot.adapters.discord.commands import (
     CommandOption,
@@ -32,7 +27,6 @@ from nonebot.adapters.discord.commands import (
 from .config import Config
 from .dyuserinfo import dyUserInfo
 
-import httpx
 import asyncio
 
 from .utils import *
@@ -100,7 +94,7 @@ async def handle_bind(bot:Bot, event: Event, args: Message = CommandArg()):
         else:
             rp_text=await bind_user(account_user_id,args)
             logger.debug(f"Received bind command with args: {args} from QQ user: {account_user_id}")
-    except Exception as exc:
+    except Exception:
         logger.info("USER_NOT_FOUND:用户不存在")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await bind.finish(reply +"\n500 USER_NOT_FOUND: User does not exist.")
@@ -123,9 +117,9 @@ async def handle_query_recent(bot:Bot, event: Event, sql_session:async_scoped_se
     # output
     if args!="text" and args!="":
         if bot.type=="Discord":
-            await query_recent.finish(reply + f"\nWrong argument format. Use /recent or /recent text to get your latest play record.\n/recent :Get the record image.\n/recent text :Get the record in text format.")
+            await query_recent.finish(reply + "\nWrong argument format. Use /recent or /recent text to get your latest play record.\n/recent :Get the record image.\n/recent text :Get the record in text format.")
         else:
-            await query_recent.finish(f"参数错误，请使用 /recent 或 /recent text 来查询最近游玩记录\n/recent 查询带图片的记录\n/recent text 查询文本记录")
+            await query_recent.finish("参数错误，请使用 /recent 或 /recent text 来查询最近游玩记录\n/recent 查询带图片的记录\n/recent text 查询文本记录")
         return
     
     if (dyuserinfo := await sql_session.get(dyUserInfo, event.get_user_id())):
@@ -140,7 +134,7 @@ async def handle_query_recent(bot:Bot, event: Event, sql_session:async_scoped_se
         try:
             r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
 
-        except Exception as exc:
+        except Exception:
             logger.error("Query Failed")
             # logger.debug(f"Received error response from user search endpoint: {exc}")
             await query_recent.finish(reply +"Query Failed")
@@ -207,7 +201,7 @@ async def handle_bind_discord(event:InteractionCreateEvent,usr: CommandOption[st
     logger.debug(f"handling bind, argument: {usr}")
     try:
         rp_text=await bind_user(discord_user,usr,"Discord")
-    except Exception as exc:
+    except Exception:
         logger.info("USER_NOT_FOUND:用户不存在")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await bind_discord.finish(DiscordMessageSegment.text("500 USER_NOT_FOUND: User does not exist."))
@@ -227,7 +221,7 @@ async def handle_discord_recent(event:InteractionCreateEvent,sql_session:async_s
     # fetch recent record
     try:
         r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
-    except Exception as exc:
+    except Exception:
         logger.error("Query Failed")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await query_recent_discord.finish(reply +"Query Failed")
@@ -275,7 +269,7 @@ async def handle_discord_recent_text(event:InteractionCreateEvent,sql_session:as
     try:
         r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
 
-    except Exception as exc:
+    except Exception:
         logger.error("Query Failed")
         # logger.debug(f"Received error response from user search endpoint: {exc}")
         await query_recent_discord_text.finish(reply +"Query Failed")

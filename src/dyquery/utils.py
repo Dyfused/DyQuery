@@ -11,13 +11,12 @@ import asyncio
 from datetime import datetime
 import pytz
 
-from decimal import Decimal
 from io import BytesIO
 
 from nonebot.adapters.onebot.v11 import PrivateMessageEvent,GroupMessageEvent
 from nonebot.adapters import Bot
 
-from nonebot.adapters.discord import GuildMessageCreateEvent, InteractionCreateEvent,ApplicationCommandInteractionEvent
+from nonebot.adapters.discord import GuildMessageCreateEvent, ApplicationCommandInteractionEvent
 from nonebot.adapters import Event
 
 from nonebot_plugin_orm import get_session
@@ -342,7 +341,7 @@ async def generate_image_recent(**kwargs):
     saira_time=ImageFont.truetype(str(image_asset_dir / "Saira-Regular.ttf"), 50)
     saira_score=ImageFont.truetype(str(image_asset_dir / "Saira-Regular.ttf"), 140)
 
-    draw.text((270,50), f"Recent Record", font=eurostyle_italic, fill=(255,255,255))
+    draw.text((270,50), "Recent Record", font=eurostyle_italic, fill=(255,255,255))
             
     # difficulty icon
     match(difficulty_class-1):
@@ -379,15 +378,15 @@ async def generate_image_recent(**kwargs):
     #score
     draw.text((800,400), f"{score}", font=saira_score, fill=(255,255,255),anchor="ma",align="center")
     #player
-    draw.text((430,630), f"Player:",align="center", anchor="ma",font=saira_small, fill=(255,255,255))
+    draw.text((430,630), "Player:",align="center", anchor="ma",font=saira_small, fill=(255,255,255))
     draw.text((430,740), f"{user_name}",align="center", anchor="ma",font=player_info_font, fill=(255,255,255))
     #R points
     draw.text((1025,630), f"R.Points:\n{r}",align="center", anchor="ma",font=saira_small, fill=(255,255,255))
     draw.text((700,860), f"Acc: {accuracy*100:.2f}%",align="center", anchor="ma",font=saira_small, fill=(255,255,255))
     # play details
-    draw.text((1340,435), f"Perfect", font=saira_small, fill=(255,255,255))
-    draw.text((1340,645), f"Good", font=saira_small, fill=(255,255,255))
-    draw.text((1340,855), f"Miss", font=saira_small, fill=(255,255,255))
+    draw.text((1340,435), "Perfect", font=saira_small, fill=(255,255,255))
+    draw.text((1340,645), "Good", font=saira_small, fill=(255,255,255))
+    draw.text((1340,855), "Miss", font=saira_small, fill=(255,255,255))
     draw.text((1870,435), f"{perfect}", anchor="ra",font=saira_small, fill=(255,255,255))
     draw.text((1870,645), f"{good}", anchor="ra",font=saira_small, fill=(255,255,255))
     draw.text((1870,855), f"{miss}", anchor="ra",font=saira_small, fill=(255,255,255))

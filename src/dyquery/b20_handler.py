@@ -6,23 +6,16 @@ from nonebot_plugin_orm import async_scoped_session
 from nonebot.exception import FinishedException
 from nonebot.adapters import Event
 from nonebot.rule import Rule
-from nonebot.adapters.onebot.v11 import MessageSegment, PrivateMessageEvent,GroupMessageEvent
+from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.adapters import Message, Bot
 
-from nonebot.adapters.discord import GuildMessageCreateEvent, InteractionCreateEvent,ApplicationCommandInteractionEvent
 from nonebot.adapters.discord import MessageSegment as DiscordMessageSegment
 
 from nonebot.params import CommandArg
 
-import nonebot_plugin_localstore as store
 
 from nonebot.adapters.discord.api import (
-    IntegerOption,
-    NumberOption,
     StringOption,
-    SubCommandOption,
-    User,
-    UserOption,
 )
 from nonebot.adapters.discord.commands import (
     CommandOption,
@@ -32,9 +25,8 @@ from nonebot.adapters.discord.commands import (
 from .config import Config
 from .dyuserinfo import dyUserInfo
 
-import httpx
 import asyncio
-from typing import Optional,Any
+from typing import Optional
 
 from .utils import *
 from .b20utils import wrapper_draw_best_20,wrapper_draw_best_20_binary
@@ -95,12 +87,12 @@ async def handle_dynamite_b20_command(bot: Bot, event: Event, sql_session:async_
         await best20.finish("查询超时，请稍后重试", reply_message=True)
     except BombException as exc:
         logger.exception(f"Dynamite b20 failed: {exc}")
-        await best20.finish(f"查询失败: 500 USER_NOT_FOUND: User does not exist.", reply_message=True)
+        await best20.finish("查询失败: 500 USER_NOT_FOUND: User does not exist.", reply_message=True)
     except FinishedException:
         raise
     except Exception as exc:
         logger.exception(f"Dynamite b20 failed: {exc}")
-        await best20.finish(f"查询失败, 请稍后再试", reply_message=True)
+        await best20.finish("查询失败, 请稍后再试", reply_message=True)
 
 # =============Discord handlers=============
 @best20_discord.handle()
@@ -145,7 +137,7 @@ async def handle_best20_discord(bot: Bot, event: Event, sql_session:async_scoped
         await best20_discord.finish("Query failed: Timeout. Please try again later.")
     except BombException as exc:
         logger.exception(f"Dynamite b20 failed: {exc}")
-        await best20_discord.finish(f"Query failed: 500 USER_NOT_FOUND: User does not exist.")
+        await best20_discord.finish("Query failed: 500 USER_NOT_FOUND: User does not exist.")
     except FinishedException:
         raise
     except Exception as exc:
