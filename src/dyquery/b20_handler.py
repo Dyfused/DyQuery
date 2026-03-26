@@ -99,7 +99,7 @@ async def handle_dynamite_b20_command(bot: Bot, event: Event, sql_session:async_
 async def handle_best20_discord(bot: Bot, event: Event, sql_session:async_scoped_session,username:CommandOption[Optional[str]]):
     """
     Author: yuhao7370, AXIS5
-    Discord adaptions.
+    Discord adaptions of the best20 handler.
     """
     await best20_discord.send_deferred_response()
 

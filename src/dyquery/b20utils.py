@@ -8,7 +8,7 @@ import base64
 import asyncio
 from functools import lru_cache
 
-import aiohttp
+import httpx
 from decimal import Decimal
 from io import BytesIO
 from typing import Any
@@ -198,23 +198,22 @@ async def _download_cover_if_needed(
         if cover_path.exists():
             return
         
-        # url=cover_service_url.rstrip('/')+set_id
-        url = f"{cover_service_url.rstrip('/')}/d/explode/bg/{set_id}"
+        url=cover_service_url.rstrip('/')+"/"+set_id
+        # url = f"{cover_service_url.rstrip('/')}/d/explode/bg/{set_id}"
         try:
             async with _COVER_DOWNLOAD_SEMAPHORE:
-                logger.opt(colors=True).info(f"Downloading cover for: <yellow>{set_id}</yellow>")
-                timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url) as response:
-                        if response.status != 200:
-                            logger.debug(f"Download cover response error. Response status: {response.status}")
-                            return
-                        data = await response.read()
-                        if not data:
-                            logger.debug("No data acquired.")
-                            return
-                        cover_path.parent.mkdir(parents=True, exist_ok=True)
-                        cover_path.write_bytes(data)
+                logger.opt(colors=True).info(f"Downloading cover for: <yellow>{set_id}</yellow> from url: <blue>{url}</blue>")
+                async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
+                    response = await client.get(url)
+                    if response.status_code != 200:
+                        logger.debug(f"Download cover response error. Response status: {response.status_code}")
+                        return
+                    data = response.content
+                    if not data:
+                        logger.debug("No data acquired.")
+                        return
+                    cover_path.parent.mkdir(parents=True, exist_ok=True)
+                    cover_path.write_bytes(data)
         except Exception as exc:
             logger.opt(colors=True).warning(f"Dynamite cover download failed for <yellow>{set_id}</yellow>: {exc}")
         finally:
@@ -316,7 +315,9 @@ async def draw_best20(uuid:str,dyuser:str) -> Image.Image:
 
     resource_path = image_asset_dir
     font_path = image_asset_dir / "sy.ttf"
-    cover_service_url = config.bg_download_openlist
+
+    # cover_service_url = config.bg_download_openlist
+    cover_service_url = config.bg_download_url_base
     timeout_seconds = max(3, config.http_timeout_seconds)
     # logger.debug(f"Received dynamite bind user info: {dyuser}")
     username = dyuser

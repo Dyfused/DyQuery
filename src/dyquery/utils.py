@@ -5,6 +5,8 @@ from nonebot import logger
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 import httpx
+from httpx import AsyncHTTPTransport # 导入 Transport 模块
+
 import time
 import random
 import asyncio
@@ -26,6 +28,7 @@ from .dyuserinfo import dyUserInfo
 
 config = get_plugin_config(Config)
 
+
 class BombException(RuntimeError):
     """
     Explode Errors
@@ -35,6 +38,8 @@ class BombException(RuntimeError):
 image_asset_dir = Path(__file__).parent / "assets"
 image_asset_dir.mkdir(exist_ok=True)
 
+# httpx retry config
+transport=AsyncHTTPTransport(retries=config.http_retry_times)
 #=============Rule Checkers=============
 async def is_enabled() -> bool:
     return config.dyquery_plugin_enabled
@@ -121,33 +126,38 @@ async def fetch_user(user_name)-> tuple[str, str]:
     return:id,username
     """
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(transport=transport) as client:
             resp = await client.post(
                 config.api_base_url + config.user_search_api,
                 json={"username": user_name},
                 headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=5,
+                timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
             data = resp.json().get("data", {})
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 500:
+            logger.info("500 USER_NOT_FOUND: User does not exist")
+            raise BombException("500 USER_NOT_FOUND: User does not exist")
+        raise BombException(f"{exc.response.status_code}: other server error occured")
     except Exception as exc:
-        logger.info("USER_NOT_FOUND:用户不存在")
+        logger.info(f"请求异常: {exc}")
         raise BombException(f"{exc}")
     return data["id"],data["username"]
 
 
 async def fetch_user_by_id(user_id:str):
     """
-    Get explode user data by name
+    Get explode user data info by user id
     return:data in dict
     """
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(transport=transport) as client:
             resp = await client.get(
                 config.api_base_url + config.user_base_api+ user_id,
                 headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=10,
+                timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
@@ -216,14 +226,16 @@ async def fetch_recent(dyuserinfo:dyUserInfo):
     Fetch the recent record of a user
     """
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(transport=transport) as client:
             resp = await client.get(
                 config.api_base_url + config.user_base_api+dyuserinfo.dynamite_user_id+"/last",
                 headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=10,
+                timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
+        if len(resp.json().get("data", []))==0:
+            raise "The user has not played any charts yet."
         latest_record = resp.json().get("data", [])[0]
     except Exception as exc:
         raise BombException(f"{exc}")
@@ -259,11 +271,11 @@ async def fetch_b20(uuid:str):
     Fetch the Best20 record of a user
     """
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(transport=transport) as client:
             resp = await client.get(
                 config.api_base_url + config.user_base_api+uuid+"/best",
                 headers={"Accept": "application/json,text/plain", "Content-Type": "application/json"},
-                timeout=10,
+                timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
@@ -309,8 +321,8 @@ async def generate_image_recent(**kwargs):
 
     try:
         # There are redirects in the bg download url, so we need to allow redirects in the http client
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            bg_response = await client.get(config.bg_download_url_base + str(set_id), timeout=10)
+        async with httpx.AsyncClient(transport=transport,follow_redirects=True) as client:
+            bg_response = await client.get(config.bg_download_url_base + str(set_id), timeout=config.http_timeout_seconds)
             bg_response.raise_for_status()
             bg_image = Image.open(BytesIO(bg_response.content)).convert("RGBA")
             bg_image = bg_image.resize((1900,830))

@@ -33,7 +33,6 @@ from .utils import *
 
 config = get_plugin_config(Config)
 
-
 rule = Rule(is_enabled, is_whitelist)
 
 diffs=["CASUAL","NORMAL","HARD","MEGA","GIGA","TERA"]
