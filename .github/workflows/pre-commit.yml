@@ -1,3 +1,9 @@
+name: pre-commit modifications
+on:
+  push:
+    branches:
+    - main
+
 jobs:
   lint:
     runs-on: windows-latest

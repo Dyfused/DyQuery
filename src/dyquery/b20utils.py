@@ -26,39 +26,40 @@ config = get_plugin_config(Config)
 image_asset_dir = Path(__file__).parent / "assets"
 image_asset_dir.mkdir(exist_ok=True)
 
-#===================Wrapper=====================
+
+# ===================Wrapper=====================
 def _img_to_b64_sync(img: Image.Image) -> str:
     with BytesIO() as bytes_io:
         img.save(bytes_io, "PNG")
         raw = bytes_io.getvalue()
     return "base64://" + base64.b64encode(raw).decode()
 
+
 async def img2b64(img: Image.Image) -> str:
     return await asyncio.to_thread(_img_to_b64_sync, img)
 
+
 async def wrapper_draw_best_20(
-    uuid:str,
-    username:str,
-    timeout_seconds: int = 30
+    uuid: str, username: str, timeout_seconds: int = 30
 ) -> str:
     image = await asyncio.wait_for(
-        draw_best20(uuid,username),
+        draw_best20(uuid, username),
         timeout=max(5, int(timeout_seconds)),
     )
     return await img2b64(image)
 
+
 async def wrapper_draw_best_20_binary(
-    uuid:str,
-    username:str,
-    timeout_seconds: int = 30
+    uuid: str, username: str, timeout_seconds: int = 30
 ) -> Image.Image:
     image = await asyncio.wait_for(
-        draw_best20(uuid,username),
+        draw_best20(uuid, username),
         timeout=max(5, int(timeout_seconds)),
     )
     return image
 
-#===================B20 Image=====================
+
+# ===================B20 Image=====================
 TAN75 = 0.266
 
 DIFFICULTY_TEXTS = [
@@ -85,6 +86,7 @@ def _open_image(image_path: str | Path) -> Image.Image:
     with open(image_path, "rb") as file:
         return Image.open(file).convert("RGBA")
 
+
 # 画平行四边形
 def _get_parallelogram_image(width: int, height: int, color: str) -> Image.Image:
     image = Image.new(mode="RGB", size=(width, height), color=color)
@@ -96,21 +98,30 @@ def _get_parallelogram_image(width: int, height: int, color: str) -> Image.Image
     return image
 
 
-def _get_illustration_image(path: str | Path, width_to: int, height_to: int) -> Image.Image:
+def _get_illustration_image(
+    path: str | Path, width_to: int, height_to: int
+) -> Image.Image:
     image = _open_image(path)
     width, height = image.size
     target_w = height * width_to / height_to
     target_h = width * height_to / width_to
     if width / height > width_to / height_to:
-        image = image.crop((int((width - target_w) / 2), 0, int((width + target_w) / 2), height))
+        image = image.crop(
+            (int((width - target_w) / 2), 0, int((width + target_w) / 2), height)
+        )
     else:
-        image = image.crop((0, int((height - target_h) / 2), width, int((height + target_h) / 2)))
+        image = image.crop(
+            (0, int((height - target_h) / 2), width, int((height + target_h) / 2))
+        )
     image = image.resize((width_to, height_to))
 
     mask = Image.new("L", image.size, color=255)
     draw = ImageDraw.Draw(mask)
     draw.polygon((0, 0, int(height_to * TAN75), 0, 0, height_to), fill=0)
-    draw.polygon((width_to, 0, width_to - int(height_to * TAN75), height_to, width_to, height_to), fill=0)
+    draw.polygon(
+        (width_to, 0, width_to - int(height_to * TAN75), height_to, width_to, height_to),
+        fill=0,
+    )
     image.putalpha(mask)
     return image
 
@@ -118,6 +129,7 @@ def _get_illustration_image(path: str | Path, width_to: int, height_to: int) -> 
 @lru_cache(maxsize=128)
 def _load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(font_path, size)
+
 
 def _draw_text(
     draw: ImageDraw.ImageDraw,
@@ -128,7 +140,9 @@ def _draw_text(
     color: tuple[int, int, int, int] = (255, 255, 255, 255),
     anchor: str = "lt",
 ) -> None:
-    draw.text(position, text, fill=color, font=_load_font(font_path, font_size), anchor=anchor)
+    draw.text(
+        position, text, fill=color, font=_load_font(font_path, font_size), anchor=anchor
+    )
 
 
 _DIFFICULTY_PARALLELOGRAMS = [
@@ -171,8 +185,10 @@ def _load_rank_image(resource_path: str, tier: int) -> Image.Image:
     return _open_image(Path(resource_path) / f"UI1_Difficulties_{tier}.png")
     # return _open_image(Path(resource_path) / f"ranks/UI1_Difficulties_{tier}.png")
 
+
 def _get_rank_image(resource_path: str, score: int) -> Image.Image:
     return _load_rank_image(resource_path, _score_tier(score)).copy()
+
 
 def _get_cover_lock(set_id: str) -> asyncio.Lock:
     lock = _COVER_LOCKS.get(set_id)
@@ -197,16 +213,22 @@ async def _download_cover_if_needed(
     async with lock:
         if cover_path.exists():
             return
-        
-        url=cover_service_url.rstrip('/')+"/"+set_id
+
+        url = cover_service_url.rstrip("/") + "/" + set_id
         # url = f"{cover_service_url.rstrip('/')}/d/explode/bg/{set_id}"
         try:
             async with _COVER_DOWNLOAD_SEMAPHORE:
-                logger.opt(colors=True).info(f"Downloading cover for: <yellow>{set_id}</yellow> from url: <blue>{url}</blue>")
-                async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
+                logger.opt(colors=True).info(
+                    f"Downloading cover for: <yellow>{set_id}</yellow> from url: <blue>{url}</blue>"
+                )
+                async with httpx.AsyncClient(
+                    timeout=timeout_seconds, follow_redirects=True
+                ) as client:
                     response = await client.get(url)
                     if response.status_code != 200:
-                        logger.debug(f"Download cover response error. Response status: {response.status_code}")
+                        logger.debug(
+                            f"Download cover response error. Response status: {response.status_code}"
+                        )
                         return
                     data = response.content
                     if not data:
@@ -215,16 +237,21 @@ async def _download_cover_if_needed(
                     cover_path.parent.mkdir(parents=True, exist_ok=True)
                     cover_path.write_bytes(data)
         except Exception as exc:
-            logger.opt(colors=True).warning(f"Dynamite cover download failed for <yellow>{set_id}</yellow>: {exc}")
+            logger.opt(colors=True).warning(
+                f"Dynamite cover download failed for <yellow>{set_id}</yellow>: {exc}"
+            )
         finally:
             if not lock.locked():
                 _COVER_LOCKS.pop(set_id, None)
+
 
 def _safe_accuracy(perfect: int, good: int, miss: int) -> str:
     total = perfect + good + miss
     if total <= 0:
         return "0.00"
-    value = Decimal((perfect + good * 0.5) / total * 100.0).quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
+    value = Decimal((perfect + good * 0.5) / total * 100.0).quantize(
+        Decimal("0.01"), rounding="ROUND_HALF_UP"
+    )
     return str(value)
 
 
@@ -285,23 +312,73 @@ def _render_best20_image(
             illustration_image = _get_illustration_image(default_cover_path, 408, 230)
 
         image.alpha_composite(_BACKGROUND_PARALLELOGRAM, (x - 21, y))
-        _draw_text(draw, (x + 20, y + 22), f"#{count}", font_path, 30, (0, 0, 0, 255), anchor="mm")
+        _draw_text(
+            draw,
+            (x + 20, y + 22),
+            f"#{count}",
+            font_path,
+            30,
+            (0, 0, 0, 255),
+            anchor="mm",
+        )
         image.alpha_composite(illustration_image, (x, y))
-        image.alpha_composite(_DIFFICULTY_PARALLELOGRAMS[difficulty_class], (x - 72, y + 138))
-        _draw_text(draw, (x + 16, y + 163), f"{difficulty_text} {difficulty_value}", font_path, 26, anchor="mm")
+        image.alpha_composite(
+            _DIFFICULTY_PARALLELOGRAMS[difficulty_class], (x - 72, y + 138)
+        )
+        _draw_text(
+            draw,
+            (x + 16, y + 163),
+            f"{difficulty_text} {difficulty_value}",
+            font_path,
+            26,
+            anchor="mm",
+        )
         _draw_text(draw, (x + 9, y + 198), f"R: {r_value}", font_path, 38, anchor="mm")
         _draw_text(draw, (x + 655, y + 44), music_name, font_path, 32, anchor="mm")
-        _draw_text(draw, (x + 530, y + 131), f"{score}".zfill(7), font_path, 37, anchor="ls")
-        _draw_text(draw, (x + 738, y + 131), f"{_safe_accuracy(perfect, good, miss)}%", font_path, 27, anchor="ls")
+        _draw_text(
+            draw, (x + 530, y + 131), f"{score}".zfill(7), font_path, 37, anchor="ls"
+        )
+        _draw_text(
+            draw,
+            (x + 738, y + 131),
+            f"{_safe_accuracy(perfect, good, miss)}%",
+            font_path,
+            27,
+            anchor="ls",
+        )
 
         rank_image = _get_rank_image(resource_path, score).resize((115, 115))
         image.alpha_composite(rank_image, (x + 392, y + 80))
 
-        _draw_text(draw, (x + 525, y + 190), "Perfect", font_path, 22, (255, 183, 0, 255), anchor="ls")
+        _draw_text(
+            draw,
+            (x + 525, y + 190),
+            "Perfect",
+            font_path,
+            22,
+            (255, 183, 0, 255),
+            anchor="ls",
+        )
         _draw_text(draw, (x + 630, y + 181), str(perfect), font_path, 22, anchor="mm")
-        _draw_text(draw, (x + 663, y + 190), "Good", font_path, 22, (76, 171, 255, 255), anchor="ls")
+        _draw_text(
+            draw,
+            (x + 663, y + 190),
+            "Good",
+            font_path,
+            22,
+            (76, 171, 255, 255),
+            anchor="ls",
+        )
         _draw_text(draw, (x + 740, y + 181), str(good), font_path, 22, anchor="mm")
-        _draw_text(draw, (x + 765, y + 190), "Miss", font_path, 22, (255, 76, 76, 255), anchor="ls")
+        _draw_text(
+            draw,
+            (x + 765, y + 190),
+            "Miss",
+            font_path,
+            22,
+            (255, 76, 76, 255),
+            anchor="ls",
+        )
         _draw_text(draw, (x + 837, y + 181), str(miss), font_path, 22, anchor="mm")
 
         count += 1
@@ -311,7 +388,7 @@ def _render_best20_image(
     return image
 
 
-async def draw_best20(uuid:str,dyuser:str) -> Image.Image:
+async def draw_best20(uuid: str, dyuser: str) -> Image.Image:
 
     resource_path = image_asset_dir
     font_path = image_asset_dir / "sy.ttf"

@@ -63,8 +63,8 @@ aiohttp
 1. run `nb orm revision -m "Comment for new table for new plugin" --branch-label <labelname>` to create a migration script
 2. run `nb orm upgrade` to upgrade the database
 3. run `nb orm check` to check if the database matches the bot configuration
-   
-   
+
+
 插件配置项:
 
 启用插件:
@@ -87,5 +87,3 @@ BG_DOWNLOAD_URL_BASE="http://<服务器地址:api端口>/download/cover/480x270_
 BG_DOWNLOAD_OPENLIST="http://<服务器地址:Openlist端口>/"
 "
 ```
-
-

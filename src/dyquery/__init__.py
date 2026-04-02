@@ -35,7 +35,7 @@ __plugin_meta__ = PluginMetadata(
     usage="",
     config=Config,
     type="application",
-    supported_adapters={"~onebot.v11","~discord"},  # 适配器支持集合
+    supported_adapters={"~onebot.v11", "~discord"},  # 适配器支持集合
 )
 
 config = get_plugin_config(Config)
@@ -43,16 +43,20 @@ config = get_plugin_config(Config)
 # create table if not exists (unnecessary, auto managed by nonebot_plugin_orm)
 # CreateTable(dyUserInfo.__table__)
 
-from .handlers import bind, query_recent,bind_discord,query_recent_discord,query_recent_discord_text
-from .b20_handler import best20,best20_discord
+from .handlers import (
+    bind,
+    query_recent,
+    bind_discord,
+    query_recent_discord,
+    query_recent_discord_text,
+)
+from .b20_handler import best20, best20_discord
 
 bind_process = bind
 query_recent_process = query_recent
-b20=best20
+b20 = best20
 # discord handlers
-b_d=bind_discord
-q_d=query_recent_discord
-q_dt=query_recent_discord_text
-b20_d=best20_discord
-
-
+b_d = bind_discord
+q_d = query_recent_discord
+q_dt = query_recent_discord_text
+b20_d = best20_discord
