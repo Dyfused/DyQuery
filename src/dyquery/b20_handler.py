@@ -83,11 +83,19 @@ async def handle_dynamite_b20_command(bot: Bot, event: Event, sql_session:async_
             timeout_seconds= max(20, config.http_timeout_seconds * 3)
         )
         await best20.finish(MessageSegment.image(image_b64), reply_message=True)
-    except asyncio.TimeoutError:
-        await best20.finish("查询超时，请稍后重试", reply_message=True)
+    except asyncio.TimeoutError as timeout_exc:
+        await best20.finish(f"查询超时: {timeout_exc}", reply_message=True)
     except BombException as exc:
+        # 原逻辑：BombException 一律按 USER_NOT_FOUND 处理
+        # 现在：根据 utils.py 里抛出的错误文本做细分（不新增错误类，保持原异常体系）
         logger.exception(f"Dynamite b20 failed: {exc}")
-        await best20.finish("查询失败: 500 USER_NOT_FOUND: User does not exist.", reply_message=True)
+        msg = str(exc)
+        if "NO_PLAY_RECORD" in msg:
+            await best20.finish("查询失败: The user does not have any play records.", reply_message=True)
+        elif "USER_NOT_FOUND" in msg:
+            await best20.finish("查询失败: 500 USER_NOT_FOUND: User does not exist.", reply_message=True)
+        else:
+            await best20.finish("查询失败, 请稍后再试", reply_message=True)
     except FinishedException:
         raise
     except Exception as exc:
@@ -133,11 +141,19 @@ async def handle_best20_discord(bot: Bot, event: Event, sql_session:async_scoped
             image_data.save(bytes_io, "PNG")
             raw = bytes_io.getvalue()
         await best20_discord.finish(DiscordMessageSegment.attachment(file="image.jpg",content=raw))
-    except asyncio.TimeoutError:
-        await best20_discord.finish("Query failed: Timeout. Please try again later.")
+    except asyncio.TimeoutError as timeout_exc:
+        await best20_discord.finish(f"Query failed: {timeout_exc}\n Please try again later.")
     except BombException as exc:
+        # 原逻辑：BombException 一律按 USER_NOT_FOUND 处理
+        # 现在：根据 utils.py 里抛出的错误文本做细分（不新增错误类，保持原异常体系）
         logger.exception(f"Dynamite b20 failed: {exc}")
-        await best20_discord.finish("Query failed: 500 USER_NOT_FOUND: User does not exist.")
+        msg = str(exc)
+        if "NO_PLAY_RECORD" in msg:
+            await best20_discord.finish("Query failed: This user has no play record yet.")
+        elif "USER_NOT_FOUND" in msg:
+            await best20_discord.finish("Query failed: 500 USER_NOT_FOUND: User does not exist.")
+        else:
+            await best20_discord.finish("Query failed, please try again later.")
     except FinishedException:
         raise
     except Exception as exc:

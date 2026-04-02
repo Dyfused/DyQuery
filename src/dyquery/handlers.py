@@ -93,10 +93,16 @@ async def handle_bind(bot:Bot, event: Event, args: Message = CommandArg()):
         else:
             rp_text=await bind_user(account_user_id,args)
             logger.debug(f"Received bind command with args: {args} from QQ user: {account_user_id}")
-    except Exception:
-        logger.info("USER_NOT_FOUND:用户不存在")
-        # logger.debug(f"Received error response from user search endpoint: {exc}")
-        await bind.finish(reply +"\n500 USER_NOT_FOUND: User does not exist.")
+    except asyncio.TimeoutError as timeout_exc:
+        # 原逻辑：所有异常都当作 USER_NOT_FOUND
+        # 现在：按 utils.py 的约定，超时单独提示
+        await bind.finish(reply + f"\n绑定超时: {timeout_exc}")
+    except BombException as exc:
+        logger.info(f"Bind failed: {exc}")
+        await bind.finish(reply + f"绑定失败: {exc}")
+    except Exception as exc:
+        logger.exception(f"Bind failed: {exc}")
+        await bind.finish(reply + "\n绑定失败, 请稍后再试")
     await bind.finish(reply + rp_text)
 
 # ===============Recent Query================
@@ -133,9 +139,17 @@ async def handle_query_recent(bot:Bot, event: Event, sql_session:async_scoped_se
         try:
             r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
 
-        except Exception:
-            logger.error("Query Failed")
-            # logger.debug(f"Received error response from user search endpoint: {exc}")
+        except asyncio.TimeoutError as timeout_exc:
+            # 原逻辑：统一 Query Failed
+            # 现在：超时单独提示（与 b20 的提示一致）
+            await query_recent.finish(reply + f"查询超时: {timeout_exc}")
+        except BombException as exc:
+            # 原逻辑：统一 Query Failed
+            # 现在：区分「无游玩记录」与「用户不存在」
+            logger.error(f"Query recent failed: {exc}")
+            await query_recent.finish(reply + f"Query Failed: {exc}")
+        except Exception as exc:
+            logger.exception(f"Query recent failed: {exc}")
             await query_recent.finish(reply +"Query Failed")
         
         if args=="text":
@@ -165,6 +179,7 @@ async def handle_query_recent(bot:Bot, event: Event, sql_session:async_scoped_se
             cache_file =store.get_plugin_cache_file(temp_filename)
             recent_image.save(cache_file,format="PNG")
 
+            logger.opt(colors=True).debug(f"Saved temp picture as <blue>{cache_file}</blue>")
             try:
                 if bot.type=="Discord":
                     with cache_file.open("rb") as fi:
@@ -200,10 +215,19 @@ async def handle_bind_discord(event:InteractionCreateEvent,usr: CommandOption[st
     logger.debug(f"handling bind, argument: {usr}")
     try:
         rp_text=await bind_user(discord_user,usr,"Discord")
-    except Exception:
-        logger.info("USER_NOT_FOUND:用户不存在")
-        # logger.debug(f"Received error response from user search endpoint: {exc}")
-        await bind_discord.finish(DiscordMessageSegment.text("500 USER_NOT_FOUND: User does not exist."))
+    except asyncio.TimeoutError:
+        await bind_discord.finish(DiscordMessageSegment.text("Query failed: Timeout. Please try again later."))
+    except BombException as exc:
+        # 原逻辑：所有异常都当作 USER_NOT_FOUND
+        # 现在：只在 USER_NOT_FOUND 时提示该文案，否则给通用错误
+        logger.info(f"Bind failed: {exc}")
+        msg = str(exc)
+        if "USER_NOT_FOUND" in msg:
+            await bind_discord.finish(DiscordMessageSegment.text("500 USER_NOT_FOUND: User does not exist."))
+        await bind_discord.finish(DiscordMessageSegment.text("Bind failed, please try again later."))
+    except Exception as exc:
+        logger.exception(f"Bind failed: {exc}")
+        await bind_discord.finish(DiscordMessageSegment.text("Bind failed, please try again later."))
     await bind_discord.finish(DiscordMessageSegment.text(rp_text))
 
 
@@ -220,9 +244,13 @@ async def handle_discord_recent(event:InteractionCreateEvent,sql_session:async_s
     # fetch recent record
     try:
         r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
-    except Exception:
-        logger.error("Query Failed")
-        # logger.debug(f"Received error response from user search endpoint: {exc}")
+    except asyncio.TimeoutError:
+        await query_recent_discord.finish(reply + "Query failed: Timeout. Please try again later.")
+    except BombException as exc:
+        logger.error(f"Query recent failed: {exc}")
+        await query_recent_discord.finish(reply + f"Query Failed: {exc}")
+    except Exception as exc:
+        logger.exception(f"Query recent failed: {exc}")
         await query_recent_discord.finish(reply +"Query Failed")
 
     # generate recent image
@@ -268,9 +296,13 @@ async def handle_discord_recent_text(event:InteractionCreateEvent,sql_session:as
     try:
         r, music_name, difficulty_class, difficulty_value, score, perfect, good, miss, playtime, set_id, accuracy,user_name = await fetch_recent(dyuserinfo)
 
-    except Exception:
-        logger.error("Query Failed")
-        # logger.debug(f"Received error response from user search endpoint: {exc}")
+    except asyncio.TimeoutError:
+        await query_recent_discord_text.finish(reply + "Query failed: Timeout. Please try again later.")
+    except BombException as exc:
+        logger.error(f"Query recent failed: {exc}")
+        await query_recent_discord_text.finish(reply + f"Query Failed: {exc}")
+    except Exception as exc:
+        logger.exception(f"Query recent failed: {exc}")
         await query_recent_discord_text.finish(reply +"Query Failed")
 
     await query_recent_discord_text.finish(reply+ f"\n{user_name}\'s latest play record: \nMusic name: {music_name}\nDifficulty: {diffs[difficulty_class-1]} {difficulty_value}\nScore: {score}\nPerfect: {perfect}\nGood: {good}\nMiss: {miss}\nR.Points: {r}\nAccuracy: {accuracy*100:.2f}%\nData come from Dynamite Explode")

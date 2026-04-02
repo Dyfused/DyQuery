@@ -136,6 +136,11 @@ async def fetch_user(user_name)-> tuple[str, str]:
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
             data = resp.json().get("data", {})
+    except httpx.TimeoutException as exc:
+        # 原逻辑：超时/网络异常会进入 Exception 并被包装成 BombException
+        # 现在：将「API 超时」统一转换为 asyncio.TimeoutError，便于上层用 except asyncio.TimeoutError 做提示
+        logger.info(f"API timeout in fetch_user: {exc}")
+        raise asyncio.TimeoutError("Explode API request timed out") from exc
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 500:
             logger.info("500 USER_NOT_FOUND: User does not exist")
@@ -144,7 +149,13 @@ async def fetch_user(user_name)-> tuple[str, str]:
     except Exception as exc:
         logger.info(f"请求异常: {exc}")
         raise BombException(f"{exc}")
-    return data["id"],data["username"]
+
+    # 原逻辑：直接 return data["id"], data["username"]，当 data 为空时会 KeyError
+    # 按你的约定：用户不存在返回 500（这里也兜底处理为 USER_NOT_FOUND）
+    if not isinstance(data, dict) or "id" not in data or "username" not in data:
+        raise BombException("500 USER_NOT_FOUND: User does not exist")
+
+    return str(data["id"]), str(data["username"])
 
 
 async def fetch_user_by_id(user_id:str):
@@ -162,8 +173,18 @@ async def fetch_user_by_id(user_id:str):
             resp.raise_for_status()
             # get the data field from the response, which should contain user info if the username exists
             data = resp.json().get("data", {})
+    except httpx.TimeoutException as exc:
+        # 原逻辑：超时会被包装为 BombException；现在统一转换为 asyncio.TimeoutError
+        logger.info(f"API timeout in fetch_user_by_id: {exc}")
+        raise asyncio.TimeoutError("Explode API request timed out") 
+    except httpx.HTTPStatusError as exc:
+        # 按约定：用户不存在返回 500
+        if exc.response.status_code == 500:
+            raise BombException("500 USER_NOT_FOUND: User does not exist")
+        raise BombException(f"{exc.response.status_code}: other server error occured")
     except Exception as exc:
         raise BombException(f"{exc}")
+
     return data
 
 async def bind_user(user_id,user_name,source="QQ") -> str: 
@@ -176,6 +197,13 @@ async def bind_user(user_id,user_name,source="QQ") -> str:
     account_user_id=user_id
     try:
         id,name=await fetch_user(user_name)
+    except asyncio.TimeoutError:
+        # 原逻辑：所有异常都会被包装为 BombException
+        # 现在：API 超时按约定向上抛 asyncio.TimeoutError，便于 handlers.py 做超时提示
+        raise
+    except BombException:
+        # 原逻辑：这里会被 except Exception 包住重新包装；现在保持原异常信息
+        raise
     except Exception as exc:
         raise BombException(f"{exc}")
     
@@ -233,10 +261,35 @@ async def fetch_recent(dyuserinfo:dyUserInfo):
                 timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
-            # get the data field from the response, which should contain user info if the username exists
-        if len(resp.json().get("data", []))==0:
-            raise "The user has not played any charts yet."
-        latest_record = resp.json().get("data", [])[0]
+
+            payload = resp.json()
+            data = payload.get("data")
+
+            # 原逻辑：len(resp.json().get("data", []))==0 时 raise 字符串（会触发 TypeError）
+            # 现在：无游玩记录时抛 BombException，交给上层做提示
+            # 说明：你提到「无游玩记录并不会导致返回 json 为空」，因此这里不判断 payload 是否为空，
+            # 仅判断 data 是否为空/空列表/不可解析。
+            if data is None:
+                raise BombException("NO_PLAY_RECORD: User has no play record")
+            if isinstance(data, list):
+                if len(data) == 0:
+                    raise BombException("NO_PLAY_RECORD: User has no play record")
+                latest_record = data[0]
+            else:
+                # 兼容后端如果返回单个 dict 的情况
+                if not isinstance(data, dict) or len(data) == 0:
+                    raise BombException("NO_PLAY_RECORD: User has no play record")
+                latest_record = data
+    except httpx.TimeoutException as exc:
+        # 原逻辑：超时会被包装为 BombException；现在统一转换为 asyncio.TimeoutError
+        logger.info(f"API timeout in fetch_recent: {exc}")
+        raise asyncio.TimeoutError("Bomb API request timed out")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 500:
+            raise BombException("500 USER_NOT_FOUND: User does not exist")
+        raise BombException(f"{exc.response.status_code}: other server error occured")
+    except BombException:
+        raise
     except Exception as exc:
         raise BombException(f"{exc}")
     
@@ -278,10 +331,28 @@ async def fetch_b20(uuid:str):
                 timeout=config.http_timeout_seconds,
             )
             resp.raise_for_status()
-            # get the data field from the response, which should contain user info if the username exists
-        best_records = resp.json().get("data", [])
+
+            payload = resp.json()
+            best_records = payload.get("data")
+
+            # 原逻辑：默认 get("data", [])，但当后端返回 None/空时，后续绘图可能会崩
+            # 现在：无游玩记录时抛 BombException，交给上层做提示
+            if best_records is None:
+                raise BombException("NO_PLAY_RECORD: User has no play record")
+            if isinstance(best_records, list) and len(best_records) == 0:
+                raise BombException("NO_PLAY_RECORD: User has no play record")
+    except httpx.TimeoutException as exc:
+        logger.info(f"API timeout in fetch_b20: {exc}")
+        raise asyncio.TimeoutError() from exc
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 500:
+            raise BombException("500 USER_NOT_FOUND: User does not exist")
+        raise BombException(f"{exc.response.status_code}: other server error occured")
+    except BombException:
+        raise
     except Exception as exc:
         raise BombException(f"{exc}")
+
     logger.debug(f"Received Best record: {best_records}")
     return best_records
 
@@ -413,11 +484,12 @@ def generate_temp_filename() -> str:
     random_suffix = random.randint(1000, 9999)
     return f"processed_{timestamp}_{random_suffix}.png"
 
-async def cleanup_temp_file(file_path: Path, delay: float = 7.0):
+async def cleanup_temp_file(file_path: Path, delay: float = 10.0):
     """清理临时文件"""
     await asyncio.sleep(delay)
     try:
         if file_path.exists():
+            logger.debug(f"Cleaning up temp pic: {file_path}")
             file_path.unlink()
     except Exception:
         pass
