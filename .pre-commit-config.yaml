@@ -1,3 +1,9 @@
+# 默认阶段：定义所有 hooks 默认在哪个 Git 钩子阶段运行
+default_stages: [pre-commit]
+
+# 第一个 hook 失败后是否停止运行后续 hooks
+fail_fast: true
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
