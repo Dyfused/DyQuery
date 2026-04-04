@@ -119,7 +119,14 @@ def _get_illustration_image(
     draw = ImageDraw.Draw(mask)
     draw.polygon((0, 0, int(height_to * TAN75), 0, 0, height_to), fill=0)
     draw.polygon(
-        (width_to, 0, width_to - int(height_to * TAN75), height_to, width_to, height_to),
+        (
+            width_to,
+            0,
+            width_to - int(height_to * TAN75),
+            height_to,
+            width_to,
+            height_to,
+        ),
         fill=0,
     )
     image.putalpha(mask)

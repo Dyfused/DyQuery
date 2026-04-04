@@ -55,7 +55,10 @@ best20_discord = on_slash_command(
 # =============Normal handlers=============
 @best20.handle()
 async def handle_dynamite_b20_command(
-    bot: Bot, event: Event, sql_session: async_scoped_session, arg: Message = CommandArg()
+    bot: Bot,
+    event: Event,
+    sql_session: async_scoped_session,
+    arg: Message = CommandArg(),
 ) -> None:
     """
     Author: yuhao7370

@@ -593,7 +593,14 @@ async def generate_image_recent(**kwargs):
     draw.text((1870, 855), f"{miss}", anchor="ra", font=saira_small, fill=(255, 255, 255))
     # play time
     draw.text((30, 1050), f"Played at: {playtime}", font=saira_time, fill=(255, 255, 255))
-
+    # signature
+    draw.text(
+        (1950, 1050),
+        "Code by AXIS5",
+        anchor="ra",
+        font=saira_time,
+        fill=(255, 255, 255),
+    )
     return new_image
 
 
